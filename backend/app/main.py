@@ -1,11 +1,14 @@
 """GameSense FastAPI Application Entrypoint."""
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.orm import Session
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, get_db
 import app.models  # Ensures all models are registered with Base metadata
+from app.schemas.telemetry import GameplayEventCreate
 from app.routers import telemetry, sessions, analytics, recommendations
+from app.routers.telemetry import log_gameplay_event
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -47,7 +50,14 @@ def root():
         "message": "GameSense Backend API is running."
     }
 
+@app.get("/health", tags=["Health"])
 @app.get(f"{settings.API_V1_PREFIX}/health", tags=["Health"])
 def health_check():
     """API health check endpoint."""
     return {"status": "healthy"}
+    
+@app.post("/telemetry", status_code=status.HTTP_201_CREATED, tags=["Telemetry"])
+def log_telemetry(payload: GameplayEventCreate, db: Session = Depends(get_db)):
+    """Root-level telemetry event ingestion endpoint (Member 3 - Task 3)."""
+    return log_gameplay_event(payload=payload, db=db)
+

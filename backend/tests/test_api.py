@@ -39,6 +39,10 @@ def test_health_check():
     assert res.status_code == 200
     assert res.json()["status"] == "online"
 
+    health_res = client.get("/health")
+    assert health_res.status_code == 200
+    assert health_res.json()["status"] == "healthy"
+
     api_res = client.get("/api/health")
     assert api_res.status_code == 200
     assert api_res.json()["status"] == "healthy"
@@ -170,3 +174,62 @@ def test_analytics_and_recommendations():
     assert rec_data["status"] == "success"
     assert rec_data["recommendations_created"] >= 1
     assert "Spike_Trap" in rec_data["recommendations"][0]["message"]
+
+def test_root_telemetry_endpoint():
+    """Verify Task 3 root-level POST /telemetry endpoint lifecycle and validation."""
+    session_id = "task3_sess_001"
+
+    # 1. Start a session
+    res_start = client.post("/api/telemetry/session/start", json={
+        "session_id": session_id,
+        "persona_type": "EXPLORER",
+        "level_name": "Level_1",
+        "game_version": "1.0.0"
+    })
+    assert res_start.status_code == 201
+
+    # 2. Ingest valid telemetry event via POST /telemetry
+    valid_payload = {
+        "session_id": session_id,
+        "event_type": "DEATH",
+        "level_name": "Level_1",
+        "timestamp": 8.5,
+        "x": 42.0,
+        "y": -3.5,
+        "z": 0.0,
+        "cause_or_source": "Spike_Pit_A",
+        "additional_data": {"speed": 5.4}
+    }
+    res_event = client.post("/telemetry", json=valid_payload)
+    assert res_event.status_code == 201
+    event_data = res_event.json()
+    assert event_data["status"] == "success"
+    assert "event_id" in event_data
+    assert event_data["event_type"] == "DEATH"
+
+    # 3. Verify record is stored and reflected in session metrics / heatmap
+    heatmap_res = client.get("/api/analytics/heatmaps?type=DEATH&level_name=Level_1")
+    assert heatmap_res.status_code == 200
+    points = heatmap_res.json()
+    assert any(p["cause"] == "Spike_Pit_A" for p in points)
+
+    # 4. Verify validation: Invalid payload (missing required event_type and numeric timestamp) returns 422
+    invalid_payload = {
+        "session_id": session_id,
+        "timestamp": "INVALID_TIMESTAMP",
+        "x": 42.0,
+        "y": -3.5
+    }
+    res_invalid = client.post("/telemetry", json=invalid_payload)
+    assert res_invalid.status_code == 422
+
+    # 5. Verify non-existent session returns 404
+    res_nonexistent = client.post("/telemetry", json={
+        "session_id": "non_existent_session_999",
+        "event_type": "DEATH",
+        "timestamp": 1.0,
+        "x": 0.0,
+        "y": 0.0
+    })
+    assert res_nonexistent.status_code == 404
+
