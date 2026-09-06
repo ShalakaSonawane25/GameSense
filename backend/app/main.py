@@ -6,9 +6,15 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import Base, engine, get_db
 import app.models  # Ensures all models are registered with Base metadata
-from app.schemas.telemetry import GameplayEventCreate
+from app.schemas.telemetry import (
+    GameplayEventCreate,
+    SessionStartRequest,
+    SessionStartResponse,
+    SessionEndRequest,
+    SessionEndResponse,
+)
 from app.routers import telemetry, sessions, analytics, recommendations
-from app.routers.telemetry import log_gameplay_event
+from app.routers.telemetry import log_gameplay_event, start_session, end_session
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -60,4 +66,15 @@ def health_check():
 def log_telemetry(payload: GameplayEventCreate, db: Session = Depends(get_db)):
     """Root-level telemetry event ingestion endpoint (Member 3 - Task 3)."""
     return log_gameplay_event(payload=payload, db=db)
+
+@app.post("/session/start", response_model=SessionStartResponse, status_code=status.HTTP_201_CREATED, tags=["Sessions"])
+def start_session_root(payload: SessionStartRequest, db: Session = Depends(get_db)):
+    """Root-level session start endpoint (Member 3 - Task 6)."""
+    return start_session(payload=payload, db=db)
+
+@app.post("/session/end", response_model=SessionEndResponse, tags=["Sessions"])
+def end_session_root(payload: SessionEndRequest, db: Session = Depends(get_db)):
+    """Root-level session end endpoint (Member 3 - Task 6)."""
+    return end_session(payload=payload, db=db)
+
 

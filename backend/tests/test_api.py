@@ -233,3 +233,63 @@ def test_root_telemetry_endpoint():
     })
     assert res_nonexistent.status_code == 404
 
+def test_root_session_endpoints():
+    """Verify Task 6 root-level /session/start and /session/end endpoints."""
+    session_id = "root_sess_spec_001"
+
+    # 1. Validation: Missing session_id on start -> 422
+    res_bad_start = client.post("/session/start", json={})
+    assert res_bad_start.status_code == 422
+
+    # 2. Successful start -> 201
+    res_start = client.post("/session/start", json={
+        "session_id": session_id,
+        "persona_type": "SPEEDRUNNER",
+        "level_name": "Level_2",
+        "game_version": "1.1.0"
+    })
+    assert res_start.status_code == 201
+    start_data = res_start.json()
+    assert start_data["status"] == "success"
+    assert start_data["session_id"] == session_id
+
+    # 3. Validation: Missing required status on end -> 422
+    res_bad_end = client.post("/session/end", json={
+        "session_id": session_id
+    })
+    assert res_bad_end.status_code == 422
+
+    # 4. Non-existent session on end -> 404
+    res_notfound_end = client.post("/session/end", json={
+        "session_id": "fake_ghost_session_404",
+        "status": "COMPLETED"
+    })
+    assert res_notfound_end.status_code == 404
+
+    # 5. Successful end -> 200
+    res_end = client.post("/session/end", json={
+        "session_id": session_id,
+        "status": "COMPLETED",
+        "duration_seconds": 62.5,
+        "total_score": 1500,
+        "total_deaths": 2,
+        "items_collected": 5,
+        "enemies_defeated": 10
+    })
+    assert res_end.status_code == 200
+    end_data = res_end.json()
+    assert end_data["status"] == "success"
+    assert end_data["session_id"] == session_id
+    assert end_data["final_status"] == "COMPLETED"
+    assert end_data["duration_seconds"] == 62.5
+
+    # 6. Verify stored in SQLite
+    res_get = client.get(f"/api/sessions/{session_id}")
+    assert res_get.status_code == 200
+    session_row = res_get.json()
+    assert session_row["persona_type"] == "SPEEDRUNNER"
+    assert session_row["status"] == "COMPLETED"
+    assert session_row["total_score"] == 1500
+    assert session_row["total_deaths"] == 2
+
+
